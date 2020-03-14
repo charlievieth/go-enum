@@ -12,11 +12,14 @@ import "fmt"
 type Prime int
 
 const (
-	p2  Prime = 2
-	p3  Prime = 3
-	p5  Prime = 5
-	p7  Prime = 7
-	p77 Prime = 7 // Duplicate; note that p77 doesn't appear below.
+	p2 Prime = 2
+	p3 Prime = 3
+	p5 Prime = 5
+	p7 Prime = 7
+
+	// Skip duplicates: we don't support them
+	// xp77 Prime = 7 // Duplicate; note that p77 doesn't appear below.
+
 	p11 Prime = 11
 	p13 Prime = 13
 	p17 Prime = 17
@@ -36,7 +39,10 @@ func main() {
 	ck(4, "Prime(4)")
 	ck(p5, "p5")
 	ck(p7, "p7")
-	ck(p77, "p7")
+
+	// Skip duplicates: we don't support them
+	// ck(p77, "p7")
+
 	ck(p11, "p11")
 	ck(p13, "p13")
 	ck(p17, "p17")

@@ -814,38 +814,6 @@ func (g *Generator) multipleRunsValid(runs [][]Value, typeName string) {
 	g.Printf(stringMultipleRunsMarshal, typeName)
 }
 
-func (g *Generator) multipleRunsValid_OLD(runs [][]Value, typeName string) {
-	g.Printf("\n")
-	g.Printf("func (i %s) Valid() bool {\n", typeName)
-
-	n := g.buf.Len() + 4 // 4 == 1 tab
-	g.Printf("\treturn ")
-	for i, values := range runs {
-		if i != 0 {
-			g.Printf(" || ")
-			// Break long lines so that the Valid() method is readable,
-			// 60 is kinda arbitrary, but seems to work well.
-			if g.buf.Len()-n >= 60 {
-				g.Printf("\n\t\t")
-				n = g.buf.Len() + 8 // 8 == two tabs
-			}
-		}
-		if len(values) == 1 {
-			g.Printf("(i == %s)", &values[0])
-			continue
-		}
-		if values[0].value == 0 && !values[0].signed {
-			// For an unsigned lower bound of 0, "0 <= i" would be redundant.
-			g.Printf("(i <= %s)", &values[len(values)-1])
-		} else {
-			g.Printf("(%s <= i && i <= %s)", &values[0], &values[len(values)-1])
-		}
-	}
-	g.Printf("\n}\n")
-
-	g.Printf(stringMultipleRunsMarshal, typeName)
-}
-
 const stringMultipleRunsMarshal = `
 func (i %[1]s) MarshalText() ([]byte, error) {
 	if i.Valid() {
@@ -981,11 +949,7 @@ func (g *Generator) buildUnmarshalersSwitch(runs [][]Value, typeName string, mul
 		} else {
 			n := 0
 			for _, values := range runs {
-				if len(values) == 1 {
-					g.Printf("\tcase _%s_name:\n", typeName)
-					g.Printf("\t\t*i = %s\n", values[0].originalName)
-					continue
-				}
+				// TODO: avoid index on single values (use Prime test)
 				for _, value := range values {
 					g.Printf("\tcase _%s_name[%d:%d]:\n", typeName, n, n+len(value.name))
 					g.Printf("\t\t*i = %s\n", value.originalName)
