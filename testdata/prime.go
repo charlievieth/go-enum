@@ -7,7 +7,10 @@
 
 package main
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 type Prime int
 
@@ -32,31 +35,100 @@ const (
 )
 
 func main() {
-	ck(0, "Prime(0)")
-	ck(1, "Prime(1)")
-	ck(p2, "p2")
-	ck(p3, "p3")
-	ck(4, "Prime(4)")
-	ck(p5, "p5")
-	ck(p7, "p7")
+	ck(0, "Prime(0)", true)
+	ck(1, "Prime(1)", true)
+	ck(p2, "p2", false)
+	ck(p3, "p3", false)
+	ck(4, "Prime(4)", true)
+	ck(p5, "p5", false)
+	ck(p7, "p7", false)
 
 	// Skip duplicates: we don't support them
 	// ck(p77, "p7")
 
-	ck(p11, "p11")
-	ck(p13, "p13")
-	ck(p17, "p17")
-	ck(p19, "p19")
-	ck(p23, "p23")
-	ck(p29, "p29")
-	ck(p37, "p37")
-	ck(p41, "p41")
-	ck(p43, "p43")
-	ck(44, "Prime(44)")
+	ck(p11, "p11", false)
+	ck(p13, "p13", false)
+	ck(p17, "p17", false)
+	ck(p19, "p19", false)
+	ck(p23, "p23", false)
+	ck(p29, "p29", false)
+	ck(p37, "p37", false)
+	ck(p41, "p41", false)
+	ck(p43, "p43", false)
+	ck(44, "Prime(44)", true)
 }
 
-func ck(prime Prime, str string) {
-	if fmt.Sprint(prime) != str {
+func ck(c Prime, str string, invalid bool) {
+	if fmt.Sprint(c) != str {
 		panic("prime.go: " + str)
+	}
+	{
+		b, err := json.Marshal(c)
+		if invalid {
+			if err == nil {
+				panic(fmt.Sprintf("prime.go: json.Marshal: expected an error for %s", c))
+			}
+			goto MarshalText
+		}
+		if err != nil {
+			panic("prime.go: " + err.Error())
+		}
+		if string(b) != `"`+str+`"` {
+			panic(fmt.Sprintf("prime.go: json.Marshal: got: %s: want: %q", b, str))
+		}
+		var v Prime
+		if err := json.Unmarshal(b, &v); err != nil {
+			panic("prime.go: json.Unmarshal: " + err.Error())
+		}
+		if v != c {
+			panic(fmt.Sprintf("prime.go: json.Marshal: got: %s: want: %s", v, c))
+		}
+	}
+MarshalText:
+	{
+		b, err := c.MarshalText()
+		if invalid {
+			if err == nil {
+				panic(fmt.Sprintf("prime.go: MarshalText: expected an error for %s", c))
+			}
+			goto Set
+		}
+		if err != nil {
+			panic("prime.go: " + err.Error())
+		}
+		if string(b) != str {
+			panic(fmt.Sprintf("prime.go: MarshalText: got: %s: want: %s", b, str))
+		}
+		var v Prime
+		if err := v.UnmarshalText(b); err != nil {
+			panic("prime.go: UnmarshalText: " + err.Error())
+		}
+		if v != c {
+			panic(fmt.Sprintf("prime.go: MarshalText: got: %s: want: %s", v, c))
+		}
+	}
+Set:
+	{
+		var v Prime
+		err := v.Set(str)
+		if invalid {
+			if err == nil {
+				panic(fmt.Sprintf("prime.go: Set: expected an error for %s", c))
+			}
+			goto Invalid
+		}
+		if v != c {
+			panic(fmt.Sprintf("prime.go: Set: got: %s: want: %s", v, c))
+		}
+	}
+Invalid:
+	if invalid {
+		var v Prime
+		if err := json.Unmarshal([]byte(str), &v); err == nil {
+			panic("prime.go: json.Unmarshal: expected an error for: " + str)
+		}
+		if err := v.UnmarshalText([]byte(str)); err == nil {
+			panic("prime.go: UnmarshalText: expected an error for: " + str)
+		}
 	}
 }
