@@ -63,7 +63,7 @@
 //	PillAspirin // Aspirin
 //
 // to suppress it in the output.
-package main // import "golang.org/x/tools/cmd/stringer"
+package main
 
 import (
 	"bytes"
@@ -84,8 +84,15 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
+////////////////////////////////////////////////////////////////////////////////
+//
+// TODO:
+// 	1. Use the same Marshal* methods for all Run methods
+// 	2. rename "stringer" => "go-enum" (or something)
+//
+////////////////////////////////////////////////////////////////////////////////
+
 const generateMarshalers = true
-const generateIsValid = true
 
 var (
 	typeNames   = flag.String("type", "", "comma-separated list of type names; must be set")
@@ -151,6 +158,9 @@ func main() {
 	g.Printf("\n")
 	g.Printf("package %s", g.pkg.name)
 	g.Printf("\n")
+	if generateMarshalers {
+		g.Printf("import \"errors\"\n") // Used by marshal/unmarshal methods.
+	}
 	g.Printf("import \"strconv\"\n") // Used by all methods.
 
 	// Run generate for each type.
@@ -252,6 +262,25 @@ func (g *Generator) addPackage(pkg *packages.Package) {
 	}
 }
 
+const marshalerInterface = `
+	// Value methods
+	type V interface {
+		String() string
+		IsValid() bool
+		MarshalText() ([]byte, error)
+		MarshalJSON() ([]byte, error)
+	}
+	var _ V = %[1]s(0)
+
+	// Pointer methods
+	type P interface {
+		Set(string) error
+		UnmarshalText([]byte) error
+		UnmarshalJSON([]byte) error
+	}
+	var _ P = (*%[1]s)(nil)
+`
+
 // generate produces the String method for the named type.
 func (g *Generator) generate(typeName string) {
 	values := make([]Value, 0, 100)
@@ -268,6 +297,10 @@ func (g *Generator) generate(typeName string) {
 	if len(values) == 0 {
 		log.Fatalf("no values defined for type %s", typeName)
 	}
+	if generateMarshalers {
+		checkForDuplicateValues(typeName, values)
+		checkForDuplicateStrings(typeName, values)
+	}
 	// Generate code that will fail if the constants change value.
 	g.Printf("func _() {\n")
 	g.Printf("\t// An \"invalid array index\" compiler error signifies that the constant values have changed.\n")
@@ -275,6 +308,9 @@ func (g *Generator) generate(typeName string) {
 	g.Printf("\tvar x [1]struct{}\n")
 	for _, v := range values {
 		g.Printf("\t_ = x[%s - %s]\n", v.originalName, v.str)
+	}
+	if generateMarshalers {
+		g.Printf(marshalerInterface, typeName)
 	}
 	g.Printf("}\n")
 	runs := splitIntoRuns(values)
@@ -290,14 +326,73 @@ func (g *Generator) generate(typeName string) {
 	// being necessary for any realistic example other than bitmasks
 	// is very low. And bitmasks probably deserve their own analysis,
 	// to be done some other day.
+	multipleRuns := false
 	switch {
 	case len(runs) == 1:
 		g.buildOneRun(runs, typeName)
 	case len(runs) <= 10:
+		multipleRuns = true
 		g.buildMultipleRuns(runs, typeName)
 	default:
 		g.buildMap(runs, typeName)
 	}
+	if generateMarshalers {
+		g.buildUnmarshalers(runs, typeName, multipleRuns)
+	}
+}
+
+// checkForDuplicateValues checks for duplicate values which make generating
+// marshal/unmarshal methods impossible.
+func checkForDuplicateValues(typeName string, values []Value) {
+	dupes := false
+	seen := make(map[uint64][]string, len(values))
+	for _, v := range values {
+		seen[v.value] = append(seen[v.value], v.originalName)
+		dupes = dupes || len(seen[v.value]) > 1
+	}
+	if !dupes {
+		return
+	}
+	var buf bytes.Buffer
+	for val, names := range seen {
+		if len(names) == 1 {
+			continue
+		}
+		if buf.Len() != 0 {
+			buf.WriteString("; ")
+		}
+		fmt.Fprintf(&buf, "%s == %d", names, val)
+	}
+	log.Fatalf("cannot generate marshal/unmarshal methods for type: %s found "+
+		"duplicate values: %s", typeName, &buf)
+}
+
+// checkForDuplicateStrings checks for values that have duplicate string forms
+// which is possible with the -linecomment flag and makes generating
+// marshal/unmarshal methods impossible.
+func checkForDuplicateStrings(typeName string, values []Value) {
+	dupes := false
+	seen := make(map[string][]string, len(values))
+	for _, v := range values {
+		seen[v.name] = append(seen[v.name], v.originalName)
+		dupes = dupes || len(seen[v.name]) > 1
+	}
+	if !dupes {
+		return
+	}
+	var buf bytes.Buffer
+	for name, origNames := range seen {
+		if len(origNames) == 1 {
+			continue
+		}
+		if buf.Len() != 0 {
+			buf.WriteString("; ")
+		}
+		fmt.Fprintf(&buf, "%s == %s", origNames, name)
+	}
+	log.Fatalf("cannot generate marshal/unmarshal methods for type: %s found "+
+		"values with duplicate strings representations: %s",
+		typeName, &buf)
 }
 
 // splitIntoRuns breaks the values into runs of contiguous sequences.
@@ -567,8 +662,14 @@ func (g *Generator) buildOneRun(runs [][]Value, typeName string) {
 	}
 	if values[0].value == 0 { // Signed or unsigned, 0 is still 0.
 		g.Printf(stringOneRun, typeName, usize(len(values)), lessThanZero)
+		if generateMarshalers {
+			g.Printf(stringOneRunMarshal, typeName, usize(len(values)), lessThanZero)
+		}
 	} else {
 		g.Printf(stringOneRunWithOffset, typeName, values[0].String(), usize(len(values)), lessThanZero)
+		if generateMarshalers {
+			g.Printf(stringOneRunWithOffsetMarshal, typeName, values[0].String(), usize(len(values)), lessThanZero)
+		}
 	}
 }
 
@@ -584,8 +685,28 @@ const stringOneRun = `func (i %[1]s) String() string {
 }
 `
 
-const stringOneRunValid = `func (i %[1]s) IsValid() bool {
+const stringOneRunMarshal = `
+func (i %[1]s) IsValid() bool {
 	return !(%[3]si >= %[1]s(len(_%[1]s_index)-1))
+}
+
+func (i %[1]s) MarshalText() ([]byte, error) {
+	if %[3]si >= %[1]s(len(_%[1]s_index)-1) {
+		return nil, errors.New("invalid %[1]s")
+	}
+	return []byte(_%[1]s_name[_%[1]s_index[i]:_%[1]s_index[i+1]]), nil
+}
+
+func (i %[1]s) MarshalJSON() ([]byte, error) {
+	if %[3]si >= %[1]s(len(_%[1]s_index)-1) {
+		return nil, errors.New("invalid %[1]s")
+	}
+	str := _%[1]s_name[_%[1]s_index[i]:_%[1]s_index[i+1]]
+	b := make([]byte, 0, len(str) + 2)
+	b = append(b, '"')
+	b = append(b, str...)
+	b = append(b, '"')
+	return b, nil
 }
 `
 
@@ -605,9 +726,31 @@ const stringOneRunWithOffset = `func (i %[1]s) String() string {
 }
 `
 
-const stringOneRunWithOffsetValid = `func (i %[1]s) IsValid() bool {
+const stringOneRunWithOffsetMarshal = `
+func (i %[1]s) IsValid() bool {
 	i -= %[2]s
 	return !(%[4]si >= %[1]s(len(_%[1]s_index)-1))
+}
+
+func (i %[1]s) MarshalText() ([]byte, error) {
+	i -= %[2]s
+	if %[4]si >= %[1]s(len(_%[1]s_index)-1) {
+		return nil, errors.New("invalid %[1]s")
+	}
+	return []byte(_%[1]s_name[_%[1]s_index[i]:_%[1]s_index[i+1]]), nil
+}
+
+func (i %[1]s) MarshalJSON() ([]byte, error) {
+	i -= %[2]s
+	if %[4]si >= %[1]s(len(_%[1]s_index)-1) {
+		return nil, errors.New("invalid %[1]s")
+	}
+	str := _%[1]s_name[_%[1]s_index[i] : _%[1]s_index[i+1]]
+	b := make([]byte, 0, len(str) + 2)
+	b = append(b, '"')
+	b = append(b, str...)
+	b = append(b, '"')
+	return b, nil
 }
 `
 
@@ -640,7 +783,89 @@ func (g *Generator) buildMultipleRuns(runs [][]Value, typeName string) {
 	g.Printf("\t\treturn \"%s(\" + strconv.FormatInt(int64(i), 10) + \")\"\n", typeName)
 	g.Printf("\t}\n")
 	g.Printf("}\n")
+
+	if generateMarshalers {
+		g.multipleRunsValid(runs, typeName)
+	}
 }
+
+func (g *Generator) multipleRunsValid(runs [][]Value, typeName string) {
+	g.Printf("\n")
+	g.Printf("func (i %s) IsValid() bool {\n", typeName)
+	g.Printf("\tswitch {\n")
+	for _, values := range runs {
+		if len(values) == 1 {
+			g.Printf("\tcase i == %s:\n", &values[0])
+			continue
+		}
+		if values[0].value == 0 && !values[0].signed {
+			// For an unsigned lower bound of 0, "0 <= i" would be redundant.
+			g.Printf("\tcase i <= %s:\n", &values[len(values)-1])
+		} else {
+			g.Printf("\tcase %s <= i && i <= %s:\n", &values[0], &values[len(values)-1])
+		}
+	}
+	g.Printf("\tdefault:\n")
+	g.Printf("\t\treturn false\n")
+	g.Printf("\t}\n")
+	g.Printf("\treturn true\n")
+	g.Printf("}\n")
+
+	g.Printf(stringMultipleRunsMarshal, typeName)
+}
+
+func (g *Generator) multipleRunsValid_OLD(runs [][]Value, typeName string) {
+	g.Printf("\n")
+	g.Printf("func (i %s) IsValid() bool {\n", typeName)
+
+	n := g.buf.Len() + 4 // 4 == 1 tab
+	g.Printf("\treturn ")
+	for i, values := range runs {
+		if i != 0 {
+			g.Printf(" || ")
+			// Break long lines so that the IsValid() method is readable,
+			// 60 is kinda arbitrary, but seems to work well.
+			if g.buf.Len()-n >= 60 {
+				g.Printf("\n\t\t")
+				n = g.buf.Len() + 8 // 8 == two tabs
+			}
+		}
+		if len(values) == 1 {
+			g.Printf("(i == %s)", &values[0])
+			continue
+		}
+		if values[0].value == 0 && !values[0].signed {
+			// For an unsigned lower bound of 0, "0 <= i" would be redundant.
+			g.Printf("(i <= %s)", &values[len(values)-1])
+		} else {
+			g.Printf("(%s <= i && i <= %s)", &values[0], &values[len(values)-1])
+		}
+	}
+	g.Printf("\n}\n")
+
+	g.Printf(stringMultipleRunsMarshal, typeName)
+}
+
+const stringMultipleRunsMarshal = `
+func (i %[1]s) MarshalText() ([]byte, error) {
+	if i.IsValid() {
+		return []byte(i.String()), nil
+	}
+	return nil, errors.New("invalid %[1]s")
+}
+
+func (i %[1]s) MarshalJSON() ([]byte, error) {
+	if i.IsValid() {
+		str := i.String()
+		b := make([]byte, 0, len(str)+2)
+		b = append(b, '"')
+		b = append(b, str...)
+		b = append(b, '"')
+		return b, nil
+	}
+	return nil, errors.New("invalid %[1]s")
+}
+`
 
 // buildMap handles the case where the space is so sparse a map is a reasonable fallback.
 // It's a rare situation but has simple code.
@@ -657,6 +882,9 @@ func (g *Generator) buildMap(runs [][]Value, typeName string) {
 	}
 	g.Printf("}\n\n")
 	g.Printf(stringMap, typeName)
+	if generateMarshalers {
+		g.Printf(stringMapMarhalers, typeName)
+	}
 }
 
 // Argument to format is the type name.
@@ -668,8 +896,166 @@ const stringMap = `func (i %[1]s) String() string {
 }
 `
 
-const stringMapValid = `func (i %[1]s) IsValid() bool {
+const stringMapMarhalers = `
+func (i %[1]s) IsValid() bool {
 	_, ok := _%[1]s_map[i]
-	rteturn ok
+	return ok
+}
+
+func (i %[1]s) MarshalText() ([]byte, error) {
+	if str, ok := _%[1]s_map[i]; ok {
+		return []byte(str), nil
+	}
+	return nil, errors.New("invalid %[1]s")
+}
+
+func (i %[1]s) MarshalJSON() ([]byte, error) {
+	if str, ok := _%[1]s_map[i]; ok {
+		b := make([]byte, 0, len(str) + 2)
+		b = append(b, '"')
+		b = append(b, str...)
+		b = append(b, '"')
+		return b, nil
+	}
+	return nil, errors.New("invalid %[1]s")
+}
+`
+
+func countValues(runs [][]Value) int {
+	n := 0
+	for _, values := range runs {
+		n += len(values)
+	}
+	return n
+}
+
+func (g *Generator) buildUnmarshalers(runs [][]Value, typeName string, multipleRuns bool) {
+	count := countValues(runs)
+	if count == 0 {
+		log.Fatalf("no values defined for type %s", typeName)
+	}
+	// TODO: benchmark map vs. switch perf and find break over
+	if count <= 16 {
+		g.buildUnmarshalersSwitch(runs, typeName, multipleRuns)
+	} else {
+		g.buildUnmarshalersMap(runs, typeName, multipleRuns)
+	}
+}
+
+func (g *Generator) buildUnmarshalersSwitch(runs [][]Value, typeName string, multipleRuns bool) {
+	marshalers := []struct {
+		funcName, switchVal string
+	}{
+		{"Set(s string)", "s"},
+		{"UnmarshalText(text []byte)", "string(text)"},
+	}
+	for _, m := range marshalers {
+		g.Printf("\nfunc (i *%s) %s (err error) {\n", typeName, m.funcName)
+		g.Printf("\tswitch %s {\n", m.switchVal)
+
+		if multipleRuns {
+			for i, values := range runs {
+				if len(values) == 1 {
+					g.Printf("\tcase _%s_name_%d:\n", typeName, i)
+					g.Printf("\t\t*i = %s\n", values[0].originalName)
+					continue
+				}
+				n := 0
+				for _, value := range values {
+					g.Printf("\tcase _%s_name_%d[%d:%d]:\n", typeName, i, n, n+len(value.name))
+					g.Printf("\t\t*i = %s\n", value.originalName)
+					n += len(value.name)
+				}
+			}
+		} else {
+			n := 0
+			for _, values := range runs {
+				if len(values) == 1 {
+					g.Printf("\tcase _%s_name:\n", typeName)
+					g.Printf("\t\t*i = %s\n", values[0].originalName)
+					continue
+				}
+				for _, value := range values {
+					g.Printf("\tcase _%s_name[%d:%d]:\n", typeName, n, n+len(value.name))
+					g.Printf("\t\t*i = %s\n", value.originalName)
+					n += len(value.name)
+				}
+			}
+		}
+
+		g.Printf("\tdefault :\n")
+		g.Printf("\t\terr = errors.New(\"invalid %s\")\n", typeName)
+		g.Printf("\t}\n")
+		g.Printf("\treturn err\n")
+		g.Printf("}\n\n")
+	}
+	g.Printf(stringSwitchUnmarshalJSON, typeName)
+	g.Printf("\n")
+}
+
+const stringSwitchUnmarshalJSON = `func (i *%[1]s) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		return nil
+	}
+	if len(data) > 1 && data[0] == '"' {
+		data = data[1 : len(data)-1]
+	}
+	return i.UnmarshalText(data)
+}
+`
+
+func (g *Generator) buildUnmarshalersMap(runs [][]Value, typeName string, multipleRuns bool) {
+	g.Printf("\nvar _%s_lookup_map = map[string]%s{\n", typeName, typeName)
+	if multipleRuns {
+		for i, values := range runs {
+			n := 0
+			for _, value := range values {
+				g.Printf("\t_%s_name_%d[%d:%d]: %s,\n", typeName, i, n, n+len(value.name), &value)
+				n += len(value.name)
+			}
+		}
+	} else {
+		n := 0
+		for _, values := range runs {
+			for _, value := range values {
+				g.Printf("\t_%s_name[%d:%d]: %s,\n", typeName, n, n+len(value.name), &value)
+				n += len(value.name)
+			}
+		}
+	}
+	g.Printf("}\n\n")
+	g.Printf(stringMapUnmarshalers, typeName)
+}
+
+// TODO: consider renaming
+const stringMapUnmarshalers = `
+func (i *%[1]s) Set(s string) error {
+	if v, ok := _%[1]s_lookup_map[s]; ok {
+		*i = v
+		return nil
+	}
+	return errors.New("invalid %[1]s")
+}
+
+func (i *%[1]s) UnmarshalText(text []byte) error {
+	if v, ok := _%[1]s_lookup_map[string(text)]; ok {
+		*i = v
+		return nil
+	}
+	return errors.New("invalid %[1]s")
+}
+
+func (i *%[1]s) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		return nil
+	}
+	if len(data) > 1 && data[0] == '"' {
+		data = data[1 : len(data)-1]
+	}
+	if v, ok := _%[1]s_lookup_map[string(data)]; ok {
+		*i = v
+		return nil
+	}
+	return errors.New("invalid %[1]s")
 }
 `
