@@ -266,7 +266,7 @@ const marshalerInterface = `
 	// Value methods
 	type V interface {
 		String() string
-		IsValid() bool
+		Valid() bool
 		MarshalText() ([]byte, error)
 		MarshalJSON() ([]byte, error)
 	}
@@ -686,20 +686,20 @@ const stringOneRun = `func (i %[1]s) String() string {
 `
 
 const stringOneRunMarshal = `
-func (i %[1]s) IsValid() bool {
+func (i %[1]s) Valid() bool {
 	return !(%[3]si >= %[1]s(len(_%[1]s_index)-1))
 }
 
 func (i %[1]s) MarshalText() ([]byte, error) {
 	if %[3]si >= %[1]s(len(_%[1]s_index)-1) {
-		return nil, errors.New("invalid %[1]s")
+		return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
 	}
 	return []byte(_%[1]s_name[_%[1]s_index[i]:_%[1]s_index[i+1]]), nil
 }
 
 func (i %[1]s) MarshalJSON() ([]byte, error) {
 	if %[3]si >= %[1]s(len(_%[1]s_index)-1) {
-		return nil, errors.New("invalid %[1]s")
+		return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
 	}
 	str := _%[1]s_name[_%[1]s_index[i]:_%[1]s_index[i+1]]
 	b := make([]byte, 0, len(str) + 2)
@@ -727,7 +727,7 @@ const stringOneRunWithOffset = `func (i %[1]s) String() string {
 `
 
 const stringOneRunWithOffsetMarshal = `
-func (i %[1]s) IsValid() bool {
+func (i %[1]s) Valid() bool {
 	i -= %[2]s
 	return !(%[4]si >= %[1]s(len(_%[1]s_index)-1))
 }
@@ -735,7 +735,7 @@ func (i %[1]s) IsValid() bool {
 func (i %[1]s) MarshalText() ([]byte, error) {
 	i -= %[2]s
 	if %[4]si >= %[1]s(len(_%[1]s_index)-1) {
-		return nil, errors.New("invalid %[1]s")
+		return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
 	}
 	return []byte(_%[1]s_name[_%[1]s_index[i]:_%[1]s_index[i+1]]), nil
 }
@@ -743,7 +743,7 @@ func (i %[1]s) MarshalText() ([]byte, error) {
 func (i %[1]s) MarshalJSON() ([]byte, error) {
 	i -= %[2]s
 	if %[4]si >= %[1]s(len(_%[1]s_index)-1) {
-		return nil, errors.New("invalid %[1]s")
+		return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
 	}
 	str := _%[1]s_name[_%[1]s_index[i] : _%[1]s_index[i+1]]
 	b := make([]byte, 0, len(str) + 2)
@@ -791,7 +791,7 @@ func (g *Generator) buildMultipleRuns(runs [][]Value, typeName string) {
 
 func (g *Generator) multipleRunsValid(runs [][]Value, typeName string) {
 	g.Printf("\n")
-	g.Printf("func (i %s) IsValid() bool {\n", typeName)
+	g.Printf("func (i %s) Valid() bool {\n", typeName)
 	g.Printf("\tswitch {\n")
 	for _, values := range runs {
 		if len(values) == 1 {
@@ -816,14 +816,14 @@ func (g *Generator) multipleRunsValid(runs [][]Value, typeName string) {
 
 func (g *Generator) multipleRunsValid_OLD(runs [][]Value, typeName string) {
 	g.Printf("\n")
-	g.Printf("func (i %s) IsValid() bool {\n", typeName)
+	g.Printf("func (i %s) Valid() bool {\n", typeName)
 
 	n := g.buf.Len() + 4 // 4 == 1 tab
 	g.Printf("\treturn ")
 	for i, values := range runs {
 		if i != 0 {
 			g.Printf(" || ")
-			// Break long lines so that the IsValid() method is readable,
+			// Break long lines so that the Valid() method is readable,
 			// 60 is kinda arbitrary, but seems to work well.
 			if g.buf.Len()-n >= 60 {
 				g.Printf("\n\t\t")
@@ -848,14 +848,14 @@ func (g *Generator) multipleRunsValid_OLD(runs [][]Value, typeName string) {
 
 const stringMultipleRunsMarshal = `
 func (i %[1]s) MarshalText() ([]byte, error) {
-	if i.IsValid() {
+	if i.Valid() {
 		return []byte(i.String()), nil
 	}
-	return nil, errors.New("invalid %[1]s")
+	return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
 }
 
 func (i %[1]s) MarshalJSON() ([]byte, error) {
-	if i.IsValid() {
+	if i.Valid() {
 		str := i.String()
 		b := make([]byte, 0, len(str)+2)
 		b = append(b, '"')
@@ -863,7 +863,7 @@ func (i %[1]s) MarshalJSON() ([]byte, error) {
 		b = append(b, '"')
 		return b, nil
 	}
-	return nil, errors.New("invalid %[1]s")
+	return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
 }
 `
 
@@ -897,7 +897,7 @@ const stringMap = `func (i %[1]s) String() string {
 `
 
 const stringMapMarhalers = `
-func (i %[1]s) IsValid() bool {
+func (i %[1]s) Valid() bool {
 	_, ok := _%[1]s_map[i]
 	return ok
 }
@@ -906,7 +906,7 @@ func (i %[1]s) MarshalText() ([]byte, error) {
 	if str, ok := _%[1]s_map[i]; ok {
 		return []byte(str), nil
 	}
-	return nil, errors.New("invalid %[1]s")
+	return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
 }
 
 func (i %[1]s) MarshalJSON() ([]byte, error) {
@@ -917,7 +917,7 @@ func (i %[1]s) MarshalJSON() ([]byte, error) {
 		b = append(b, '"')
 		return b, nil
 	}
-	return nil, errors.New("invalid %[1]s")
+	return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
 }
 `
 
@@ -934,8 +934,11 @@ func (g *Generator) buildUnmarshalers(runs [][]Value, typeName string, multipleR
 	if count == 0 {
 		log.Fatalf("no values defined for type %s", typeName)
 	}
-	// TODO: benchmark map vs. switch perf and find break over
-	if count <= 16 {
+	// Use a map when there are more than 32 values. A switch is slightly faster
+	// with 64 values but adds a lot of code for a marginal gain.
+	//
+	// See: internal/bench_lookup/bench_lookup_test.go for benchmark results.
+	if count <= 32 {
 		g.buildUnmarshalersSwitch(runs, typeName, multipleRuns)
 	} else {
 		g.buildUnmarshalersMap(runs, typeName, multipleRuns)
@@ -943,11 +946,19 @@ func (g *Generator) buildUnmarshalers(runs [][]Value, typeName string, multipleR
 }
 
 func (g *Generator) buildUnmarshalersSwitch(runs [][]Value, typeName string, multipleRuns bool) {
+	const errFormat = `
+		if len(s) <= 32 {
+			err = errors.New("malformed %[1]s: " + string(s))
+		} else {
+			err = errors.New("malformed %[1]s: " + string(s[0:29]) + "...")
+		}
+`
+
 	marshalers := []struct {
 		funcName, switchVal string
 	}{
 		{"Set(s string)", "s"},
-		{"UnmarshalText(text []byte)", "string(text)"},
+		{"UnmarshalText(s []byte)", "string(s)"},
 	}
 	for _, m := range marshalers {
 		g.Printf("\nfunc (i *%s) %s (err error) {\n", typeName, m.funcName)
@@ -984,7 +995,7 @@ func (g *Generator) buildUnmarshalersSwitch(runs [][]Value, typeName string, mul
 		}
 
 		g.Printf("\tdefault :\n")
-		g.Printf("\t\terr = errors.New(\"invalid %s\")\n", typeName)
+		g.Printf(errFormat[1:] /* remove leading newline */, typeName)
 		g.Printf("\t}\n")
 		g.Printf("\treturn err\n")
 		g.Printf("}\n\n")
@@ -993,14 +1004,14 @@ func (g *Generator) buildUnmarshalersSwitch(runs [][]Value, typeName string, mul
 	g.Printf("\n")
 }
 
-const stringSwitchUnmarshalJSON = `func (i *%[1]s) UnmarshalJSON(data []byte) error {
-	if string(data) == "null" {
+const stringSwitchUnmarshalJSON = `func (i *%[1]s) UnmarshalJSON(s []byte) error {
+	if string(s) == "null" {
 		return nil
 	}
-	if len(data) > 1 && data[0] == '"' {
-		data = data[1 : len(data)-1]
+	if len(s) > 1 && s[0] == '"' {
+		s = s[1 : len(s)-1]
 	}
-	return i.UnmarshalText(data)
+	return i.UnmarshalText(s)
 }
 `
 
@@ -1034,28 +1045,37 @@ func (i *%[1]s) Set(s string) error {
 		*i = v
 		return nil
 	}
-	return errors.New("invalid %[1]s")
+	if len(s) <= 32 {
+		return errors.New("malformed %[1]s: " + s)
+	}
+	return errors.New("malformed %[1]s: " + s[0:29] + "...")
 }
 
-func (i *%[1]s) UnmarshalText(text []byte) error {
-	if v, ok := _%[1]s_lookup_map[string(text)]; ok {
+func (i *%[1]s) UnmarshalText(s []byte) error {
+	if v, ok := _%[1]s_lookup_map[string(s)]; ok {
 		*i = v
 		return nil
 	}
-	return errors.New("invalid %[1]s")
+	if len(s) <= 32 {
+		return errors.New("malformed %[1]s: " + string(s))
+	}
+	return errors.New("malformed %[1]s: " + string(s[0:29]) + "...")
 }
 
-func (i *%[1]s) UnmarshalJSON(data []byte) error {
-	if string(data) == "null" {
+func (i *%[1]s) UnmarshalJSON(s []byte) error {
+	if string(s) == "null" {
 		return nil
 	}
-	if len(data) > 1 && data[0] == '"' {
-		data = data[1 : len(data)-1]
+	if len(s) > 1 && s[0] == '"' {
+		s = s[1 : len(s)-1]
 	}
-	if v, ok := _%[1]s_lookup_map[string(data)]; ok {
+	if v, ok := _%[1]s_lookup_map[string(s)]; ok {
 		*i = v
 		return nil
 	}
-	return errors.New("invalid %[1]s")
+	if len(s) <= 32 {
+		return errors.New("malformed %[1]s: " + string(s))
+	}
+	return errors.New("malformed %[1]s: " + string(s[0:29]) + "...")
 }
 `
