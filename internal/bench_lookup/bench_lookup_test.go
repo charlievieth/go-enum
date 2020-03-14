@@ -68,7 +68,7 @@ const (
 	StatusNotExtended                   Status = 510
 	StatusNetworkAuthenticationRequired Status = 511
 	StatusCustomIDK                     Status = 600
-	StatusCustomJustDont                Status = 600
+	StatusCustomJustDont                Status = 601
 )
 
 var AllStatuses = [...]string{
