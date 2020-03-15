@@ -1000,6 +1000,7 @@ func (g *Generator) buildUnmarshalersMap(runs [][]Value, typeName string, multip
 	}
 	g.Printf("}\n\n")
 	g.Printf(stringMapUnmarshalers, typeName)
+	g.Printf("\n")
 }
 
 // TODO: consider renaming
