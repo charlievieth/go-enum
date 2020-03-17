@@ -689,13 +689,14 @@ func (g *Generator) createIndexAndNameDecl(run []Value, typeName string, suffix 
 
 // declareNameVars declares the concatenated names string representing all the values in the runs.
 func (g *Generator) declareNameVars(runs [][]Value, typeName string, suffix string) {
-	g.Printf("const _%s_name%s = \"", typeName, suffix)
+	g.Printf("const _%s_name%s = ", typeName, suffix)
+	b := new(bytes.Buffer)
 	for _, run := range runs {
 		for i := range run {
-			g.Printf("%s", run[i].name)
+			fmt.Fprintf(b, "%s", run[i].name)
 		}
 	}
-	g.Printf("\"\n")
+	g.Printf("%q\n", b)
 }
 
 // buildOneRun generates the variables and String method for a single run of contiguous values.
@@ -744,18 +745,6 @@ func (i %[1]s) MarshalText() ([]byte, error) {
 	}
 	return []byte(_%[1]s_name[_%[1]s_index[i]:_%[1]s_index[i+1]]), nil
 }
-
-func (i %[1]s) MarshalJSON() ([]byte, error) {
-	if %[3]si >= %[1]s(len(_%[1]s_index)-1) {
-		return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
-	}
-	str := _%[1]s_name[_%[1]s_index[i]:_%[1]s_index[i+1]]
-	b := make([]byte, 0, len(str) + 2)
-	b = append(b, '"')
-	b = append(b, str...)
-	b = append(b, '"')
-	return b, nil
-}
 `
 
 // Arguments to format are:
@@ -786,19 +775,6 @@ func (i %[1]s) MarshalText() ([]byte, error) {
 		return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i + %[2]s), 10))
 	}
 	return []byte(_%[1]s_name[_%[1]s_index[i]:_%[1]s_index[i+1]]), nil
-}
-
-func (i %[1]s) MarshalJSON() ([]byte, error) {
-	i -= %[2]s
-	if %[4]si >= %[1]s(len(_%[1]s_index)-1) {
-		return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i + %[2]s), 10))
-	}
-	str := _%[1]s_name[_%[1]s_index[i] : _%[1]s_index[i+1]]
-	b := make([]byte, 0, len(str) + 2)
-	b = append(b, '"')
-	b = append(b, str...)
-	b = append(b, '"')
-	return b, nil
 }
 `
 
@@ -869,18 +845,6 @@ func (i %[1]s) MarshalText() ([]byte, error) {
 	}
 	return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
 }
-
-func (i %[1]s) MarshalJSON() ([]byte, error) {
-	if i.Valid() {
-		str := i.String()
-		b := make([]byte, 0, len(str)+2)
-		b = append(b, '"')
-		b = append(b, str...)
-		b = append(b, '"')
-		return b, nil
-	}
-	return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
-}
 `
 
 // buildMap handles the case where the space is so sparse a map is a reasonable fallback.
@@ -921,17 +885,6 @@ func (i %[1]s) Valid() bool {
 func (i %[1]s) MarshalText() ([]byte, error) {
 	if str, ok := _%[1]s_map[i]; ok {
 		return []byte(str), nil
-	}
-	return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
-}
-
-func (i %[1]s) MarshalJSON() ([]byte, error) {
-	if str, ok := _%[1]s_map[i]; ok {
-		b := make([]byte, 0, len(str) + 2)
-		b = append(b, '"')
-		b = append(b, str...)
-		b = append(b, '"')
-		return b, nil
 	}
 	return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
 }
@@ -1012,20 +965,8 @@ func (g *Generator) buildUnmarshalersSwitch(runs [][]Value, typeName string, mul
 		g.Printf("\treturn err\n")
 		g.Printf("}\n\n")
 	}
-	g.Printf(stringSwitchUnmarshalJSON, typeName)
 	g.Printf("\n")
 }
-
-const stringSwitchUnmarshalJSON = `func (i *%[1]s) UnmarshalJSON(s []byte) error {
-	if string(s) == "null" {
-		return nil
-	}
-	if len(s) > 1 && s[0] == '"' {
-		s = s[1 : len(s)-1]
-	}
-	return i.UnmarshalText(s)
-}
-`
 
 func (g *Generator) buildUnmarshalersMap(runs [][]Value, typeName string, multipleRuns bool) {
 	g.Printf("\nvar _%s_lookup_map = map[string]%s{\n", typeName, typeName)
@@ -1065,23 +1006,6 @@ func (i *%[1]s) Set(s string) error {
 }
 
 func (i *%[1]s) UnmarshalText(s []byte) error {
-	if v, ok := _%[1]s_lookup_map[string(s)]; ok {
-		*i = v
-		return nil
-	}
-	if len(s) <= 32 {
-		return errors.New("malformed %[1]s: " + string(s))
-	}
-	return errors.New("malformed %[1]s: " + string(s[0:29]) + "...")
-}
-
-func (i *%[1]s) UnmarshalJSON(s []byte) error {
-	if string(s) == "null" {
-		return nil
-	}
-	if len(s) > 1 && s[0] == '"' {
-		s = s[1 : len(s)-1]
-	}
 	if v, ok := _%[1]s_lookup_map[string(s)]; ok {
 		*i = v
 		return nil
@@ -1132,7 +1056,7 @@ func typeMinMax(typeName string, kind types.BasicKind) (min, max uint64) {
 			return 0, math.MaxUint32
 		}
 	default:
-		log.Fatal("invalid kind: %d for type: %s", kind, typeName)
+		log.Fatalf("invalid kind: %d for type: %s", kind, typeName)
 		panic("unreachable")
 	}
 }
@@ -1235,7 +1159,7 @@ func (g *Generator) buildTests(runs [][]Value, typeName string) {
 			fmt.Fprintf(&buf, "\t\t{%[1]s(%[2]s), \"%[1]s(%[3]d)\", false},\n",
 				typeName, v.str, int64(v.value))
 		} else {
-			fmt.Fprintf(&buf, "\t\t{%[1]s, \"%[1]s\", true},\n", v.name)
+			fmt.Fprintf(&buf, "\t\t{%s, %q, true},\n", v.originalName, v.name)
 		}
 	}
 
@@ -1245,7 +1169,7 @@ func (g *Generator) buildTests(runs [][]Value, typeName string) {
 	buf.Reset()
 	for _, run := range runs {
 		for _, v := range run {
-			fmt.Fprintf(&buf, "\t\t{%[1]s, \"%[1]s\", []byte(\"%[1]s\")},\n", v.name)
+			fmt.Fprintf(&buf, "\t\t{%[1]s, %[2]q, []byte(%[2]q)},\n", v.originalName, v.name)
 		}
 	}
 	g.TPrintf(benchmarkTemplate, typeName, buf.String())
@@ -1260,10 +1184,8 @@ var (
 	_ fmt.Stringer             = %[1]s(0)
 	_ encoding.TextMarshaler   = %[1]s(0)
 	_ encoding.TextUnmarshaler = (*%[1]s)(nil)
-	_ json.Marshaler           = %[1]s(0)
-	_ json.Unmarshaler         = (*%[1]s)(nil)
-	_ func() bool              = %[1]s(0).Valid
-	_ func(string) error       = (*%[1]s)(nil).Set
+	_ func() bool              = %[1]s(0).Valid    // Valid()
+	_ func(string) error       = (*%[1]s)(nil).Set // Set()
 )
 
 func TestGeneratedEnum_%[1]s(t *testing.T) {
@@ -1352,8 +1274,13 @@ func TestGeneratedEnum_%[1]s(t *testing.T) {
 				continue
 			}
 
-			if string(data) != "\""+x.Val.String()+"\"" {
-				t.Errorf("%%+v: got: '%%s' want: '%%s'", x, data, "\""+x.Val.String()+"\"")
+			exp, err := json.Marshal(x.Val.String())
+			if err != nil {
+				t.Errorf("%%+v: %%v", x, err)
+				continue
+			}
+			if string(data) != string(exp) {
+				t.Errorf("%%+v: got: '%%s' want: '%%s'", x, data, exp)
 			}
 			var v %[1]s
 			if err := json.Unmarshal(data, &v); err != nil {
@@ -1401,34 +1328,13 @@ func TestGeneratedEnum_%[1]s(t *testing.T) {
 			if v != exp {
 				t.Errorf("%%+v: got: %%s want: %%s", x, v, exp)
 			}
-
-			// Unmarshaling "null" should be a no-op.
-			if err := v.UnmarshalJSON([]byte("null")); err != nil {
-				t.Errorf("%%+v: %%v", x, err)
-				continue
-			}
-			if v != exp {
-				t.Errorf("%%+v: got: %%s want: %%s", x, v, exp)
-			}
-		}
-
-		invalidValues := [][]byte{
-			nil,
-			{},
-			[]byte("\""),
-			[]byte("\"\""),
-		}
-		for _, data := range invalidValues {
-			var v %[1]s
-			if err := v.UnmarshalJSON(data); err == nil {
-				t.Errorf("expected an error unmarshaling: %%v: %%v", data, err)
-			}
 		}
 
 		// Test that we don't include long strings in the error message
 		var v %[1]s
-		invalid := strings.Repeat("a", 256) + "\x00" // this should not collide
-		testUnmarshalError(t, v.UnmarshalJSON([]byte("\""+invalid+"\"")), invalid)
+		invalid := strings.Repeat("a", 256) + "\\u0000" // this should not collide
+		err := json.Unmarshal([]byte("\""+invalid+"\""), &v)
+		testUnmarshalError(t, err, invalid)
 	})
 	t.Run("MarshalText", func(t *testing.T) {
 		for _, x := range tests {
@@ -1492,11 +1398,8 @@ func TestGeneratedEnum_%[1]s(t *testing.T) {
 			}
 		}
 
-		invalidValues := [][]byte{
-			nil,
-			{},
-		}
-		for _, data := range invalidValues {
+		// invalid values
+		for _, data := range [][]byte{nil, {}} {
 			var v %[1]s
 			if err := v.UnmarshalText(data); err == nil {
 				t.Errorf("expected an error unmarshaling: %%v: %%v", data, err)
@@ -1540,18 +1443,6 @@ func BenchmarkGeneratedEnum_%[1]s(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			t := tests[i%%len(tests)]
 			t.Val.Set(t.Str)
-		}
-	})
-	b.Run("MarshalJSON", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			t := tests[i%%len(tests)]
-			t.Val.MarshalJSON()
-		}
-	})
-	b.Run("UnmarshalJSON", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			t := tests[i%%len(tests)]
-			t.Val.UnmarshalJSON(t.Bytes)
 		}
 	})
 	b.Run("MarshalText", func(b *testing.B) {

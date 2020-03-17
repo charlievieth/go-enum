@@ -144,7 +144,11 @@ func TestConstValueChange(t *testing.T) {
 	// matches a set of possible error strings emitted by known
 	// Go compilers.
 	fmt.Fprintf(os.Stderr, "Note: the following messages should indicate an out-of-bounds compiler error\n")
-	err = run("go", "build", stringSource, source)
+	if generateTests {
+		err = runInDir(dir, "go", "test")
+	} else {
+		err = run("go", "build", stringSource, source)
+	}
 	if err == nil {
 		t.Fatal("unexpected compiler success")
 	}
@@ -172,6 +176,12 @@ func buildStringer(t *testing.T) (dir string, stringer string) {
 func stringerCompileAndRun(t *testing.T, dir, stringer, typeName, fileName string) {
 	t.Helper()
 	t.Logf("run: %s %s\n", fileName, typeName)
+
+	dir = filepath.Join(dir, typeName)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
 	source := filepath.Join(dir, fileName)
 	err := copy(source, filepath.Join("testdata", fileName))
 	if err != nil {
@@ -179,12 +189,20 @@ func stringerCompileAndRun(t *testing.T, dir, stringer, typeName, fileName strin
 	}
 	stringSource := filepath.Join(dir, typeName+"_string.go")
 	// Run stringer in temporary directory.
-	err = run(stringer, "-type", typeName, "-output", stringSource, source)
+	if typeName == "Linecomment" {
+		err = run(stringer, "-linecomment", "-type", typeName, "-output", stringSource, source)
+	} else {
+		err = run(stringer, "-type", typeName, "-output", stringSource, source)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Run the binary in the temporary directory.
 	err = run("go", "run", stringSource, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = runInDir(dir, "go", "test")
 	if err != nil {
 		t.Fatal(err)
 	}
