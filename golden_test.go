@@ -35,10 +35,7 @@ var golden = []Golden{
 	{"num", "", false, num_in, num_out},
 	{"unum", "", false, unum_in, unum_out},
 	{"unumpos", "", false, unumpos_in, unumpos_out},
-
-	// Skip: the prime test has duplicate values
-	// {"prime", "", false, prime_in, prime_out},
-
+	{"prime", "", false, prime_in, prime_out},
 	{"prefix", "Type", false, prefix_in, prefix_out},
 	{"tokens", "", true, tokens_in, tokens_out},
 }
@@ -58,19 +55,7 @@ const (
 )
 `
 
-const day_out = `func _() {
-	// An "invalid array index" compiler error signifies that the constant values have changed.
-	// Re-run the stringer command to generate them again.
-	var x [1]struct{}
-	_ = x[Monday-0]
-	_ = x[Tuesday-1]
-	_ = x[Wednesday-2]
-	_ = x[Thursday-3]
-	_ = x[Friday-4]
-	_ = x[Saturday-5]
-	_ = x[Sunday-6]
-}
-
+const day_out = `
 const _Day_name = "MondayTuesdayWednesdayThursdayFridaySaturdaySunday"
 
 var _Day_index = [...]uint8{0, 6, 13, 22, 30, 36, 44, 50}
@@ -80,6 +65,69 @@ func (i Day) String() string {
 		return "Day(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 	return _Day_name[_Day_index[i]:_Day_index[i+1]]
+}
+
+func (i Day) Valid() bool {
+	return !(i < 0 || i >= Day(len(_Day_index)-1))
+}
+
+func (i Day) MarshalText() ([]byte, error) {
+	if i < 0 || i >= Day(len(_Day_index)-1) {
+		return nil, errors.New("invalid Day: " + strconv.FormatInt(int64(i), 10))
+	}
+	return []byte(_Day_name[_Day_index[i]:_Day_index[i+1]]), nil
+}
+
+func (i *Day) Set(s string) (err error) {
+	switch s {
+	case _Day_name[0:6]:
+		*i = Monday
+	case _Day_name[6:13]:
+		*i = Tuesday
+	case _Day_name[13:22]:
+		*i = Wednesday
+	case _Day_name[22:30]:
+		*i = Thursday
+	case _Day_name[30:36]:
+		*i = Friday
+	case _Day_name[36:44]:
+		*i = Saturday
+	case _Day_name[44:50]:
+		*i = Sunday
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Day: " + string(s))
+		} else {
+			err = errors.New("malformed Day: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
+}
+
+func (i *Day) UnmarshalText(s []byte) (err error) {
+	switch string(s) {
+	case _Day_name[0:6]:
+		*i = Monday
+	case _Day_name[6:13]:
+		*i = Tuesday
+	case _Day_name[13:22]:
+		*i = Wednesday
+	case _Day_name[22:30]:
+		*i = Thursday
+	case _Day_name[30:36]:
+		*i = Friday
+	case _Day_name[36:44]:
+		*i = Saturday
+	case _Day_name[44:50]:
+		*i = Sunday
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Day: " + string(s))
+		} else {
+			err = errors.New("malformed Day: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
 }
 `
 
@@ -95,15 +143,7 @@ const (
 )
 `
 
-const offset_out = `func _() {
-	// An "invalid array index" compiler error signifies that the constant values have changed.
-	// Re-run the stringer command to generate them again.
-	var x [1]struct{}
-	_ = x[One-1]
-	_ = x[Two-2]
-	_ = x[Three-3]
-}
-
+const offset_out = `
 const _Number_name = "OneTwoThree"
 
 var _Number_index = [...]uint8{0, 3, 6, 11}
@@ -114,6 +154,55 @@ func (i Number) String() string {
 		return "Number(" + strconv.FormatInt(int64(i+1), 10) + ")"
 	}
 	return _Number_name[_Number_index[i]:_Number_index[i+1]]
+}
+
+func (i Number) Valid() bool {
+	i -= 1
+	return !(i < 0 || i >= Number(len(_Number_index)-1))
+}
+
+func (i Number) MarshalText() ([]byte, error) {
+	i -= 1
+	if i < 0 || i >= Number(len(_Number_index)-1) {
+		return nil, errors.New("invalid Number: " + strconv.FormatInt(int64(i+1), 10))
+	}
+	return []byte(_Number_name[_Number_index[i]:_Number_index[i+1]]), nil
+}
+
+func (i *Number) Set(s string) (err error) {
+	switch s {
+	case _Number_name[0:3]:
+		*i = One
+	case _Number_name[3:6]:
+		*i = Two
+	case _Number_name[6:11]:
+		*i = Three
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Number: " + string(s))
+		} else {
+			err = errors.New("malformed Number: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
+}
+
+func (i *Number) UnmarshalText(s []byte) (err error) {
+	switch string(s) {
+	case _Number_name[0:3]:
+		*i = One
+	case _Number_name[3:6]:
+		*i = Two
+	case _Number_name[6:11]:
+		*i = Three
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Number: " + string(s))
+		} else {
+			err = errors.New("malformed Number: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
 }
 `
 
@@ -131,20 +220,7 @@ const (
 )
 `
 
-const gap_out = `func _() {
-	// An "invalid array index" compiler error signifies that the constant values have changed.
-	// Re-run the stringer command to generate them again.
-	var x [1]struct{}
-	_ = x[Two-2]
-	_ = x[Three-3]
-	_ = x[Five-5]
-	_ = x[Six-6]
-	_ = x[Seven-7]
-	_ = x[Eight-8]
-	_ = x[Nine-9]
-	_ = x[Eleven-11]
-}
-
+const gap_out = `
 const (
 	_Gap_name_0 = "TwoThree"
 	_Gap_name_1 = "FiveSixSevenEightNine"
@@ -170,6 +246,80 @@ func (i Gap) String() string {
 		return "Gap(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 }
+
+func (i Gap) Valid() bool {
+	switch {
+	case 2 <= i && i <= 3:
+	case 5 <= i && i <= 9:
+	case i == 11:
+	default:
+		return false
+	}
+	return true
+}
+
+func (i Gap) MarshalText() ([]byte, error) {
+	if i.Valid() {
+		return []byte(i.String()), nil
+	}
+	return nil, errors.New("invalid Gap: " + strconv.FormatInt(int64(i), 10))
+}
+
+func (i *Gap) Set(s string) (err error) {
+	switch s {
+	case _Gap_name_0[0:3]:
+		*i = Two
+	case _Gap_name_0[3:8]:
+		*i = Three
+	case _Gap_name_1[0:4]:
+		*i = Five
+	case _Gap_name_1[4:7]:
+		*i = Six
+	case _Gap_name_1[7:12]:
+		*i = Seven
+	case _Gap_name_1[12:17]:
+		*i = Eight
+	case _Gap_name_1[17:21]:
+		*i = Nine
+	case _Gap_name_2:
+		*i = Eleven
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Gap: " + string(s))
+		} else {
+			err = errors.New("malformed Gap: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
+}
+
+func (i *Gap) UnmarshalText(s []byte) (err error) {
+	switch string(s) {
+	case _Gap_name_0[0:3]:
+		*i = Two
+	case _Gap_name_0[3:8]:
+		*i = Three
+	case _Gap_name_1[0:4]:
+		*i = Five
+	case _Gap_name_1[4:7]:
+		*i = Six
+	case _Gap_name_1[7:12]:
+		*i = Seven
+	case _Gap_name_1[12:17]:
+		*i = Eight
+	case _Gap_name_1[17:21]:
+		*i = Nine
+	case _Gap_name_2:
+		*i = Eleven
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Gap: " + string(s))
+		} else {
+			err = errors.New("malformed Gap: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
+}
 `
 
 // Signed integers spanning zero.
@@ -183,17 +333,7 @@ const (
 )
 `
 
-const num_out = `func _() {
-	// An "invalid array index" compiler error signifies that the constant values have changed.
-	// Re-run the stringer command to generate them again.
-	var x [1]struct{}
-	_ = x[m_2 - -2]
-	_ = x[m_1 - -1]
-	_ = x[m0-0]
-	_ = x[m1-1]
-	_ = x[m2-2]
-}
-
+const num_out = `
 const _Num_name = "m_2m_1m0m1m2"
 
 var _Num_index = [...]uint8{0, 3, 6, 8, 10, 12}
@@ -204,6 +344,63 @@ func (i Num) String() string {
 		return "Num(" + strconv.FormatInt(int64(i+-2), 10) + ")"
 	}
 	return _Num_name[_Num_index[i]:_Num_index[i+1]]
+}
+
+func (i Num) Valid() bool {
+	i -= -2
+	return !(i < 0 || i >= Num(len(_Num_index)-1))
+}
+
+func (i Num) MarshalText() ([]byte, error) {
+	i -= -2
+	if i < 0 || i >= Num(len(_Num_index)-1) {
+		return nil, errors.New("invalid Num: " + strconv.FormatInt(int64(i+-2), 10))
+	}
+	return []byte(_Num_name[_Num_index[i]:_Num_index[i+1]]), nil
+}
+
+func (i *Num) Set(s string) (err error) {
+	switch s {
+	case _Num_name[0:3]:
+		*i = m_2
+	case _Num_name[3:6]:
+		*i = m_1
+	case _Num_name[6:8]:
+		*i = m0
+	case _Num_name[8:10]:
+		*i = m1
+	case _Num_name[10:12]:
+		*i = m2
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Num: " + string(s))
+		} else {
+			err = errors.New("malformed Num: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
+}
+
+func (i *Num) UnmarshalText(s []byte) (err error) {
+	switch string(s) {
+	case _Num_name[0:3]:
+		*i = m_2
+	case _Num_name[3:6]:
+		*i = m_1
+	case _Num_name[6:8]:
+		*i = m0
+	case _Num_name[8:10]:
+		*i = m1
+	case _Num_name[10:12]:
+		*i = m2
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Num: " + string(s))
+		} else {
+			err = errors.New("malformed Num: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
 }
 `
 
@@ -221,17 +418,7 @@ const (
 )
 `
 
-const unum_out = `func _() {
-	// An "invalid array index" compiler error signifies that the constant values have changed.
-	// Re-run the stringer command to generate them again.
-	var x [1]struct{}
-	_ = x[m_2-253]
-	_ = x[m_1-254]
-	_ = x[m0-0]
-	_ = x[m1-1]
-	_ = x[m2-2]
-}
-
+const unum_out = `
 const (
 	_Unum_name_0 = "m0m1m2"
 	_Unum_name_1 = "m_2m_1"
@@ -253,6 +440,67 @@ func (i Unum) String() string {
 		return "Unum(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 }
+
+func (i Unum) Valid() bool {
+	switch {
+	case i <= 2:
+	case 253 <= i && i <= 254:
+	default:
+		return false
+	}
+	return true
+}
+
+func (i Unum) MarshalText() ([]byte, error) {
+	if i.Valid() {
+		return []byte(i.String()), nil
+	}
+	return nil, errors.New("invalid Unum: " + strconv.FormatInt(int64(i), 10))
+}
+
+func (i *Unum) Set(s string) (err error) {
+	switch s {
+	case _Unum_name_0[0:2]:
+		*i = m0
+	case _Unum_name_0[2:4]:
+		*i = m1
+	case _Unum_name_0[4:6]:
+		*i = m2
+	case _Unum_name_1[0:3]:
+		*i = m_2
+	case _Unum_name_1[3:6]:
+		*i = m_1
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Unum: " + string(s))
+		} else {
+			err = errors.New("malformed Unum: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
+}
+
+func (i *Unum) UnmarshalText(s []byte) (err error) {
+	switch string(s) {
+	case _Unum_name_0[0:2]:
+		*i = m0
+	case _Unum_name_0[2:4]:
+		*i = m1
+	case _Unum_name_0[4:6]:
+		*i = m2
+	case _Unum_name_1[0:3]:
+		*i = m_2
+	case _Unum_name_1[3:6]:
+		*i = m_1
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Unum: " + string(s))
+		} else {
+			err = errors.New("malformed Unum: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
+}
 `
 
 // Unsigned positive integers.
@@ -269,17 +517,7 @@ const (
 )
 `
 
-const unumpos_out = `func _() {
-	// An "invalid array index" compiler error signifies that the constant values have changed.
-	// Re-run the stringer command to generate them again.
-	var x [1]struct{}
-	_ = x[m253-253]
-	_ = x[m254-254]
-	_ = x[m1-1]
-	_ = x[m2-2]
-	_ = x[m3-3]
-}
-
+const unumpos_out = `
 const (
 	_Unumpos_name_0 = "m1m2m3"
 	_Unumpos_name_1 = "m253m254"
@@ -302,6 +540,67 @@ func (i Unumpos) String() string {
 		return "Unumpos(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 }
+
+func (i Unumpos) Valid() bool {
+	switch {
+	case 1 <= i && i <= 3:
+	case 253 <= i && i <= 254:
+	default:
+		return false
+	}
+	return true
+}
+
+func (i Unumpos) MarshalText() ([]byte, error) {
+	if i.Valid() {
+		return []byte(i.String()), nil
+	}
+	return nil, errors.New("invalid Unumpos: " + strconv.FormatInt(int64(i), 10))
+}
+
+func (i *Unumpos) Set(s string) (err error) {
+	switch s {
+	case _Unumpos_name_0[0:2]:
+		*i = m1
+	case _Unumpos_name_0[2:4]:
+		*i = m2
+	case _Unumpos_name_0[4:6]:
+		*i = m3
+	case _Unumpos_name_1[0:4]:
+		*i = m253
+	case _Unumpos_name_1[4:8]:
+		*i = m254
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Unumpos: " + string(s))
+		} else {
+			err = errors.New("malformed Unumpos: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
+}
+
+func (i *Unumpos) UnmarshalText(s []byte) (err error) {
+	switch string(s) {
+	case _Unumpos_name_0[0:2]:
+		*i = m1
+	case _Unumpos_name_0[2:4]:
+		*i = m2
+	case _Unumpos_name_0[4:6]:
+		*i = m3
+	case _Unumpos_name_1[0:4]:
+		*i = m253
+	case _Unumpos_name_1[4:8]:
+		*i = m254
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Unumpos: " + string(s))
+		} else {
+			err = errors.New("malformed Unumpos: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
+}
 `
 
 // Enough gaps to trigger a map implementation of the method.
@@ -312,7 +611,8 @@ const (
 	p3 Prime = 3
 	p5 Prime = 5
 	p7 Prime = 7
-	p77 Prime = 7 // Duplicate; note that p77 doesn't appear below.
+	// Skip duplicates: we don't support them
+	// p77 Prime = 7 // Duplicate; note that p77 doesn't appear below.
 	p11 Prime = 11
 	p13 Prime = 13
 	p17 Prime = 17
@@ -325,26 +625,7 @@ const (
 )
 `
 
-const prime_out = `func _() {
-	// An "invalid array index" compiler error signifies that the constant values have changed.
-	// Re-run the stringer command to generate them again.
-	var x [1]struct{}
-	_ = x[p2-2]
-	_ = x[p3-3]
-	_ = x[p5-5]
-	_ = x[p7-7]
-	_ = x[p77-7]
-	_ = x[p11-11]
-	_ = x[p13-13]
-	_ = x[p17-17]
-	_ = x[p19-19]
-	_ = x[p23-23]
-	_ = x[p29-29]
-	_ = x[p37-31]
-	_ = x[p41-41]
-	_ = x[p43-43]
-}
-
+const prime_out = `
 const _Prime_name = "p2p3p5p7p11p13p17p19p23p29p37p41p43"
 
 var _Prime_map = map[Prime]string{
@@ -369,6 +650,94 @@ func (i Prime) String() string {
 	}
 	return "Prime(" + strconv.FormatInt(int64(i), 10) + ")"
 }
+
+func (i Prime) Valid() bool {
+	_, ok := _Prime_map[i]
+	return ok
+}
+
+func (i Prime) MarshalText() ([]byte, error) {
+	if str, ok := _Prime_map[i]; ok {
+		return []byte(str), nil
+	}
+	return nil, errors.New("invalid Prime: " + strconv.FormatInt(int64(i), 10))
+}
+
+func (i *Prime) Set(s string) (err error) {
+	switch s {
+	case _Prime_name[0:2]:
+		*i = p2
+	case _Prime_name[2:4]:
+		*i = p3
+	case _Prime_name[4:6]:
+		*i = p5
+	case _Prime_name[6:8]:
+		*i = p7
+	case _Prime_name[8:11]:
+		*i = p11
+	case _Prime_name[11:14]:
+		*i = p13
+	case _Prime_name[14:17]:
+		*i = p17
+	case _Prime_name[17:20]:
+		*i = p19
+	case _Prime_name[20:23]:
+		*i = p23
+	case _Prime_name[23:26]:
+		*i = p29
+	case _Prime_name[26:29]:
+		*i = p37
+	case _Prime_name[29:32]:
+		*i = p41
+	case _Prime_name[32:35]:
+		*i = p43
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Prime: " + string(s))
+		} else {
+			err = errors.New("malformed Prime: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
+}
+
+func (i *Prime) UnmarshalText(s []byte) (err error) {
+	switch string(s) {
+	case _Prime_name[0:2]:
+		*i = p2
+	case _Prime_name[2:4]:
+		*i = p3
+	case _Prime_name[4:6]:
+		*i = p5
+	case _Prime_name[6:8]:
+		*i = p7
+	case _Prime_name[8:11]:
+		*i = p11
+	case _Prime_name[11:14]:
+		*i = p13
+	case _Prime_name[14:17]:
+		*i = p17
+	case _Prime_name[17:20]:
+		*i = p19
+	case _Prime_name[20:23]:
+		*i = p23
+	case _Prime_name[23:26]:
+		*i = p29
+	case _Prime_name[26:29]:
+		*i = p37
+	case _Prime_name[29:32]:
+		*i = p41
+	case _Prime_name[32:35]:
+		*i = p43
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Prime: " + string(s))
+		} else {
+			err = errors.New("malformed Prime: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
+}
 `
 
 const prefix_in = `type Type int
@@ -383,19 +752,7 @@ const (
 )
 `
 
-const prefix_out = `func _() {
-	// An "invalid array index" compiler error signifies that the constant values have changed.
-	// Re-run the stringer command to generate them again.
-	var x [1]struct{}
-	_ = x[TypeInt-0]
-	_ = x[TypeString-1]
-	_ = x[TypeFloat-2]
-	_ = x[TypeRune-3]
-	_ = x[TypeByte-4]
-	_ = x[TypeStruct-5]
-	_ = x[TypeSlice-6]
-}
-
+const prefix_out = `
 const _Type_name = "IntStringFloatRuneByteStructSlice"
 
 var _Type_index = [...]uint8{0, 3, 9, 14, 18, 22, 28, 33}
@@ -405,6 +762,69 @@ func (i Type) String() string {
 		return "Type(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 	return _Type_name[_Type_index[i]:_Type_index[i+1]]
+}
+
+func (i Type) Valid() bool {
+	return !(i < 0 || i >= Type(len(_Type_index)-1))
+}
+
+func (i Type) MarshalText() ([]byte, error) {
+	if i < 0 || i >= Type(len(_Type_index)-1) {
+		return nil, errors.New("invalid Type: " + strconv.FormatInt(int64(i), 10))
+	}
+	return []byte(_Type_name[_Type_index[i]:_Type_index[i+1]]), nil
+}
+
+func (i *Type) Set(s string) (err error) {
+	switch s {
+	case _Type_name[0:3]:
+		*i = TypeInt
+	case _Type_name[3:9]:
+		*i = TypeString
+	case _Type_name[9:14]:
+		*i = TypeFloat
+	case _Type_name[14:18]:
+		*i = TypeRune
+	case _Type_name[18:22]:
+		*i = TypeByte
+	case _Type_name[22:28]:
+		*i = TypeStruct
+	case _Type_name[28:33]:
+		*i = TypeSlice
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Type: " + string(s))
+		} else {
+			err = errors.New("malformed Type: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
+}
+
+func (i *Type) UnmarshalText(s []byte) (err error) {
+	switch string(s) {
+	case _Type_name[0:3]:
+		*i = TypeInt
+	case _Type_name[3:9]:
+		*i = TypeString
+	case _Type_name[9:14]:
+		*i = TypeFloat
+	case _Type_name[14:18]:
+		*i = TypeRune
+	case _Type_name[18:22]:
+		*i = TypeByte
+	case _Type_name[22:28]:
+		*i = TypeStruct
+	case _Type_name[28:33]:
+		*i = TypeSlice
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Type: " + string(s))
+		} else {
+			err = errors.New("malformed Type: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
 }
 `
 
@@ -425,21 +845,7 @@ const (
 )
 `
 
-const tokens_out = `func _() {
-	// An "invalid array index" compiler error signifies that the constant values have changed.
-	// Re-run the stringer command to generate them again.
-	var x [1]struct{}
-	_ = x[And-0]
-	_ = x[Or-1]
-	_ = x[Add-2]
-	_ = x[Sub-3]
-	_ = x[Ident-4]
-	_ = x[Period-5]
-	_ = x[SingleBefore-6]
-	_ = x[BeforeAndInline-7]
-	_ = x[InlineGeneral-8]
-}
-
+const tokens_out = `
 const _Token_name = "&|+-Ident.SingleBeforeinlineinline general"
 
 var _Token_index = [...]uint8{0, 1, 2, 3, 4, 9, 10, 22, 28, 42}
@@ -450,11 +856,80 @@ func (i Token) String() string {
 	}
 	return _Token_name[_Token_index[i]:_Token_index[i+1]]
 }
+
+func (i Token) Valid() bool {
+	return !(i < 0 || i >= Token(len(_Token_index)-1))
+}
+
+func (i Token) MarshalText() ([]byte, error) {
+	if i < 0 || i >= Token(len(_Token_index)-1) {
+		return nil, errors.New("invalid Token: " + strconv.FormatInt(int64(i), 10))
+	}
+	return []byte(_Token_name[_Token_index[i]:_Token_index[i+1]]), nil
+}
+
+func (i *Token) Set(s string) (err error) {
+	switch s {
+	case _Token_name[0:1]:
+		*i = And
+	case _Token_name[1:2]:
+		*i = Or
+	case _Token_name[2:3]:
+		*i = Add
+	case _Token_name[3:4]:
+		*i = Sub
+	case _Token_name[4:9]:
+		*i = Ident
+	case _Token_name[9:10]:
+		*i = Period
+	case _Token_name[10:22]:
+		*i = SingleBefore
+	case _Token_name[22:28]:
+		*i = BeforeAndInline
+	case _Token_name[28:42]:
+		*i = InlineGeneral
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Token: " + string(s))
+		} else {
+			err = errors.New("malformed Token: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
+}
+
+func (i *Token) UnmarshalText(s []byte) (err error) {
+	switch string(s) {
+	case _Token_name[0:1]:
+		*i = And
+	case _Token_name[1:2]:
+		*i = Or
+	case _Token_name[2:3]:
+		*i = Add
+	case _Token_name[3:4]:
+		*i = Sub
+	case _Token_name[4:9]:
+		*i = Ident
+	case _Token_name[9:10]:
+		*i = Period
+	case _Token_name[10:22]:
+		*i = SingleBefore
+	case _Token_name[22:28]:
+		*i = BeforeAndInline
+	case _Token_name[28:42]:
+		*i = InlineGeneral
+	default:
+		if len(s) <= 32 {
+			err = errors.New("malformed Token: " + string(s))
+		} else {
+			err = errors.New("malformed Token: " + string(s[0:29]) + "...")
+		}
+	}
+	return err
+}
 `
 
 func TestGolden(t *testing.T) {
-	t.Skip("Skipping Golden tests: TODO: update expected output")
-
 	testenv.NeedsTool(t, "go")
 
 	dir, err := ioutil.TempDir("", "stringer")
@@ -462,6 +937,13 @@ func TestGolden(t *testing.T) {
 		t.Error(err)
 	}
 	defer os.RemoveAll(dir)
+
+	tmp, err := ioutil.TempDir("", "stringer-tests")
+	if err != nil {
+		t.Error(err)
+	}
+
+	var failed []string
 
 	for _, test := range golden {
 		g := Generator{
@@ -484,8 +966,32 @@ func TestGolden(t *testing.T) {
 		}
 		g.generate(tokens[1])
 		got := string(g.format())
+		// ignore trailing whitespace (it's not important)
+		got = strings.TrimRight(got, "\n")
+		test.output = strings.TrimRight(test.output, "\n")
 		if got != test.output {
-			t.Errorf("%s: got(%d)\n====\n%q====\nexpected(%d)\n====%q", test.name, len(got), got, len(test.output), test.output)
+			if testing.Verbose() {
+				t.Errorf("%s: got(%d)\n====\n%s====\nexpected(%d)\n====\n%s====\n",
+					test.name, len(got), got, len(test.output), test.output)
+			} else {
+				t.Error(test.name)
+			}
+			failed = append(failed, test.name)
+
+			base := filepath.Join(tmp, test.name)
+			if err := ioutil.WriteFile(base+".got", []byte(got), 0644); err != nil {
+				t.Error(err)
+			}
+			if err := ioutil.WriteFile(base+".exp", []byte(test.output), 0644); err != nil {
+				t.Error(err)
+			}
 		}
+	}
+
+	if t.Failed() {
+		t.Errorf("\nTest failures:\n  %s\nFailure diffs are saved at: %s",
+			strings.Join(failed, "\n  "), tmp)
+	} else {
+		os.RemoveAll(tmp)
 	}
 }
