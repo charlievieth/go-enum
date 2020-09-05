@@ -1017,8 +1017,6 @@ func (i *%[1]s) UnmarshalText(s []byte) error {
 }
 `
 
-// WARN WARN WARN WARN WARN WARN WARN WARN WARN WARN WARN WARN WARN WARN WARN
-
 func typeMinMax(typeName string, kind types.BasicKind) (min, max uint64) {
 	// use u to defeat the compiler's overflow check
 	u := func(i int64) uint64 {
