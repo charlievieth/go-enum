@@ -189,7 +189,7 @@ func stringerCompileAndRun(t *testing.T, dir, stringer, typeName, fileName strin
 	}
 	stringSource := filepath.Join(dir, typeName+"_string.go")
 	// Run stringer in temporary directory.
-	if typeName == "Linecomment" {
+	if typeName == "Linecomment" || typeName == "Country" {
 		err = run(stringer, "-linecomment", "-type", typeName, "-output", stringSource, source)
 	} else {
 		err = run(stringer, "-type", typeName, "-output", stringSource, source)
