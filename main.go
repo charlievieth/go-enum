@@ -103,6 +103,7 @@ var (
 	output      = flag.String("output", "", "output file name; default srcdir/<type>_string.go")
 	trimprefix  = flag.String("trimprefix", "", "trim the `prefix` from the generated constant names")
 	linecomment = flag.Bool("linecomment", false, "use line comment text as printed text when present")
+	sql         = flag.Bool("sql", false, "generate database/sql.Scanner database/sql/driver.Valuer methods")
 	buildTags   = flag.String("tags", "", "comma-separated list of build tags to apply")
 )
 
@@ -144,6 +145,10 @@ func main() {
 	g := Generator{
 		trimPrefix:  *trimprefix,
 		lineComment: *linecomment,
+		sql:         *sql,
+	}
+	if g.sql && !generateMarshalers {
+		panic("cannot generate SQL without Marshalers")
 	}
 	// TODO(suzmue): accept other patterns for packages (directories, list of files, import paths, etc).
 	if len(args) == 1 && isDirectory(args[0]) {
@@ -162,8 +167,14 @@ func main() {
 	g.Printf("\n")
 	g.Printf("package %s", g.pkg.name)
 	g.Printf("\n")
+	if g.sql {
+		g.Printf("import \"database/sql/driver\"\n") // Return value for Value() methods
+	}
 	if generateMarshalers {
 		g.Printf("import \"errors\"\n") // Used by marshal/unmarshal methods.
+	}
+	if g.sql {
+		g.Printf("import \"fmt\"\n") // Used by sql methods for errors.
 	}
 	g.Printf("import \"strconv\"\n") // Used by all methods.
 
@@ -236,6 +247,7 @@ type Generator struct {
 
 	trimPrefix  string
 	lineComment bool
+	sql         bool
 }
 
 func (g *Generator) Printf(format string, args ...interface{}) {
@@ -256,6 +268,7 @@ type File struct {
 
 	trimPrefix  string
 	lineComment bool
+	sql         bool
 }
 
 type Package struct {
@@ -714,10 +727,16 @@ func (g *Generator) buildOneRun(runs [][]Value, typeName string) {
 		if generateMarshalers {
 			g.Printf(stringOneRunMarshal, typeName, usize(len(values)), lessThanZero)
 		}
+		if g.sql {
+			g.Printf(stringOneRunSQL, typeName, usize(len(values)), lessThanZero)
+		}
 	} else {
 		g.Printf(stringOneRunWithOffset, typeName, values[0].String(), usize(len(values)), lessThanZero)
 		if generateMarshalers {
 			g.Printf(stringOneRunWithOffsetMarshal, typeName, values[0].String(), usize(len(values)), lessThanZero)
+		}
+		if g.sql {
+			g.Printf(stringOneRunWithOffsetSQL, typeName, values[0].String(), usize(len(values)), lessThanZero)
 		}
 	}
 }
@@ -744,6 +763,15 @@ func (i %[1]s) MarshalText() ([]byte, error) {
 		return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
 	}
 	return []byte(_%[1]s_name[_%[1]s_index[i]:_%[1]s_index[i+1]]), nil
+}
+`
+
+const stringOneRunSQL = `
+func (i %[1]s) Value() (driver.Value, error) {
+	if %[3]si >= %[1]s(len(_%[1]s_index)-1) {
+		return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
+	}
+	return _%[1]s_name[_%[1]s_index[i]:_%[1]s_index[i+1]], nil
 }
 `
 
@@ -775,6 +803,16 @@ func (i %[1]s) MarshalText() ([]byte, error) {
 		return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i + %[2]s), 10))
 	}
 	return []byte(_%[1]s_name[_%[1]s_index[i]:_%[1]s_index[i+1]]), nil
+}
+`
+
+const stringOneRunWithOffsetSQL = `
+func (i %[1]s) Value() (driver.Value, error) {
+	i -= %[2]s
+	if %[4]si >= %[1]s(len(_%[1]s_index)-1) {
+		return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i + %[2]s), 10))
+	}
+	return _%[1]s_name[_%[1]s_index[i]:_%[1]s_index[i+1]], nil
 }
 `
 
@@ -836,12 +874,24 @@ func (g *Generator) multipleRunsValid(runs [][]Value, typeName string) {
 	g.Printf("}\n")
 
 	g.Printf(stringMultipleRunsMarshal, typeName)
+	if g.sql {
+		g.Printf(stringMultipleRunsSQL, typeName)
+	}
 }
 
 const stringMultipleRunsMarshal = `
 func (i %[1]s) MarshalText() ([]byte, error) {
 	if i.Valid() {
 		return []byte(i.String()), nil
+	}
+	return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
+}
+`
+
+const stringMultipleRunsSQL = `
+func (i %[1]s) Value() (driver.Value, error) {
+	if i.Valid() {
+		return i.String(), nil
 	}
 	return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
 }
@@ -865,6 +915,9 @@ func (g *Generator) buildMap(runs [][]Value, typeName string) {
 	if generateMarshalers {
 		g.Printf(stringMapMarhalers, typeName)
 	}
+	if g.sql {
+		g.Printf(stringMapSQL, typeName)
+	}
 }
 
 // Argument to format is the type name.
@@ -887,6 +940,28 @@ func (i %[1]s) MarshalText() ([]byte, error) {
 		return []byte(str), nil
 	}
 	return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
+}
+`
+
+const stringMapSQL = `
+func (i %[1]s) Value() (driver.Value, error) {
+	if str, ok := _%[1]s_map[i]; ok {
+		return str, nil
+	}
+	return nil, errors.New("invalid %[1]s: " + strconv.FormatInt(int64(i), 10))
+}
+`
+
+const genericScanSQL = `
+func (i *%[1]s) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case string:
+		return i.Set(s)
+	case []byte:
+		return i.UnmarshalText(s)
+	default:
+		return fmt.Errorf("cannot scan type %%T into %[1]s", src)
+	}
 }
 `
 
@@ -966,6 +1041,10 @@ func (g *Generator) buildUnmarshalersSwitch(runs [][]Value, typeName string, mul
 		g.Printf("}\n\n")
 	}
 	g.Printf("\n")
+	if g.sql {
+		g.Printf(genericScanSQL, typeName)
+		g.Printf("\n")
+	}
 }
 
 func (g *Generator) buildUnmarshalersMap(runs [][]Value, typeName string, multipleRuns bool) {
@@ -990,6 +1069,10 @@ func (g *Generator) buildUnmarshalersMap(runs [][]Value, typeName string, multip
 	g.Printf("}\n\n")
 	g.Printf(stringMapUnmarshalers, typeName)
 	g.Printf("\n")
+	if g.sql {
+		g.Printf(genericScanSQL, typeName)
+		g.Printf("\n")
+	}
 }
 
 // TODO: consider renaming
@@ -1161,7 +1244,11 @@ func (g *Generator) buildTests(runs [][]Value, typeName string) {
 		}
 	}
 
-	g.TPrintf(testTemplate, typeName, buf.String())
+	if g.sql {
+		g.TPrintf(testTemplate, typeName, buf.String(), testTemplateSQL)
+	} else {
+		g.TPrintf(testTemplate, typeName, buf.String(), "", "")
+	}
 	g.TPrintf("\n")
 
 	buf.Reset()
@@ -1170,7 +1257,11 @@ func (g *Generator) buildTests(runs [][]Value, typeName string) {
 			fmt.Fprintf(&buf, "\t\t{%[1]s, %[2]q, []byte(%[2]q)},\n", v.originalName, v.name)
 		}
 	}
-	g.TPrintf(benchmarkTemplate, typeName, buf.String())
+	if g.sql {
+		g.TPrintf(benchmarkTemplate, typeName, buf.String(), benchmarkTemplateSQL)
+	} else {
+		g.TPrintf(benchmarkTemplate, typeName, buf.String(), "")
+	}
 	g.TPrintf("\n")
 }
 
@@ -1195,6 +1286,7 @@ func TestGeneratedEnum_%[1]s(t *testing.T) {
 	}{
 %[2]s
 	}
+
 	testUnmarshalError := func(t *testing.T, err error, s string) {
 		t.Helper()
 		if err == nil {
@@ -1211,6 +1303,7 @@ func TestGeneratedEnum_%[1]s(t *testing.T) {
 			t.Errorf("unmarshal error: got: %%s want: %%s", err.Error(), exp)
 		}
 	}
+
 	t.Run("Valid", func(t *testing.T) {
 		for _, x := range tests {
 			if x.Val.Valid() != x.Valid {
@@ -1218,6 +1311,7 @@ func TestGeneratedEnum_%[1]s(t *testing.T) {
 			}
 		}
 	})
+
 	t.Run("String", func(t *testing.T) {
 		for _, x := range tests {
 			str := x.Val.String()
@@ -1226,6 +1320,7 @@ func TestGeneratedEnum_%[1]s(t *testing.T) {
 			}
 		}
 	})
+
 	t.Run("Set", func(t *testing.T) {
 		var zeroValue %[1]s
 		for _, x := range tests {
@@ -1250,6 +1345,7 @@ func TestGeneratedEnum_%[1]s(t *testing.T) {
 		invalid := strings.Repeat("a", 256) + "\x00" // this should not collide
 		testUnmarshalError(t, v.Set(invalid), invalid)
 	})
+
 	t.Run("MarshalJSON", func(t *testing.T) {
 		for _, x := range tests {
 			data, err := json.Marshal(x.Val)
@@ -1290,6 +1386,7 @@ func TestGeneratedEnum_%[1]s(t *testing.T) {
 			}
 		}
 	})
+
 	t.Run("UnmarshalJSON", func(t *testing.T) {
 		var zeroValue %[1]s
 		for _, x := range tests {
@@ -1334,6 +1431,7 @@ func TestGeneratedEnum_%[1]s(t *testing.T) {
 		err := json.Unmarshal([]byte("\""+invalid+"\""), &v)
 		testUnmarshalError(t, err, invalid)
 	})
+
 	t.Run("MarshalText", func(t *testing.T) {
 		for _, x := range tests {
 			data, err := x.Val.MarshalText()
@@ -1409,7 +1507,86 @@ func TestGeneratedEnum_%[1]s(t *testing.T) {
 		invalid := strings.Repeat("a", 256) + "\x00" // this should not collide
 		testUnmarshalError(t, v.UnmarshalText([]byte(invalid)), invalid)
 	})
+%[3]s
 }
+`
+
+const testTemplateSQL = `
+	t.Run("Value", func(t *testing.T) {
+		for _, x := range tests {
+			value, err := x.Val.Value()
+			if (err == nil) != x.Valid {
+				t.Errorf("%%+v: %%v", x, err)
+				continue
+			}
+			if !x.Valid {
+				if value != nil {
+					t.Errorf("%%+v: expected nil on error got: %%v", x, value)
+				}
+				exp := fmt.Sprintf("invalid %%s: %%d", _TypeName, int64(x.Val))
+				if err.Error() != exp {
+					t.Errorf("%%+v: got: %%s want: %%s", x, err.Error(), exp)
+				}
+				continue
+			}
+
+			if value.(string) != x.Val.String() {
+				t.Errorf("%%+v: got: '%%s' want: '%%s'", x, value, x.Val.String())
+			}
+			var v %[1]s
+			if err := v.Scan(value); err != nil {
+				t.Errorf("%%+v: %%v", x, err)
+				continue
+			}
+			if v != x.Val {
+				t.Errorf("%%+v: got: %%s want: %%s", x, v, x.Val)
+			}
+		}
+	})
+	t.Run("Scan", func(t *testing.T) {
+		var zeroValue %[1]s
+		for _, x := range tests {
+			value, err := x.Val.Value()
+			if (err == nil) != x.Valid {
+				t.Errorf("%%+v: %%v", x, err)
+				continue
+			}
+			if !x.Valid {
+				// Set the value to the string value, which is also invalid.
+				value = x.Str
+			}
+
+			var v %[1]s
+			err = v.Scan(value)
+			if (err == nil) != x.Valid {
+				t.Errorf("%%+v: %%v", x, err)
+				continue
+			}
+			if !x.Valid {
+				testUnmarshalError(t, err, value.(string))
+			}
+			exp := x.Val
+			if !x.Valid {
+				exp = zeroValue
+			}
+			if v != exp {
+				t.Errorf("%%+v: got: %%s want: %%s", x, v, exp)
+			}
+		}
+
+		// invalid values
+		for _, data := range []interface{}{nil, []byte{}, 123} {
+			var v %[1]s
+			if err := v.Scan(data); err == nil {
+				t.Errorf("expected an error unmarshaling: %%v: %%v", data, err)
+			}
+		}
+
+		// Test that we don't include long strings in the error message
+		var v %[1]s
+		invalid := strings.Repeat("a", 256) + "\x00" // this should not collide
+		testUnmarshalError(t, v.Scan([]byte(invalid)), invalid)
+	})
 `
 
 // Arguments to format are:
@@ -1455,5 +1632,21 @@ func BenchmarkGeneratedEnum_%[1]s(b *testing.B) {
 			t.Val.UnmarshalText(t.Bytes)
 		}
 	})
+%[3]s
 }
+`
+
+const benchmarkTemplateSQL = `
+	b.Run("Value", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			t := tests[i%%len(tests)]
+			t.Val.Value()
+		}
+	})
+	b.Run("Scan", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			t := tests[i%%len(tests)]
+			t.Val.Scan(t.Bytes)
+		}
+	})
 `
