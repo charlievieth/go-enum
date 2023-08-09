@@ -1,5 +1,10 @@
 module github.com/charlievieth/go-enum
 
-go 1.15
+go 1.19
 
-require golang.org/x/tools v0.1.5
+require golang.org/x/tools v0.12.0
+
+require (
+	golang.org/x/mod v0.12.0 // indirect
+	golang.org/x/sys v0.11.0 // indirect
+)
